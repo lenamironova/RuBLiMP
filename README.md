@@ -345,14 +345,26 @@ cd RuBLiMP/
 
 ## :link: Cite us
 ```
-@misc{taktasheva2024rublimprussianbenchmarklinguistic,
-      title={RuBLiMP: Russian Benchmark of Linguistic Minimal Pairs}, 
-      author={Ekaterina Taktasheva and Maxim Bazhukov and Kirill Koncha and Alena Fenogenova and Ekaterina Artemova and Vladislav Mikhailov},
-      year={2024},
-      eprint={2406.19232},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL},
-      url={https://arxiv.org/abs/2406.19232}, 
+@inproceedings{taktasheva-etal-2024-rublimp,
+    title = "{R}u{BL}i{MP}: {R}ussian Benchmark of Linguistic Minimal Pairs",
+    author = "Taktasheva, Ekaterina  and
+      Bazhukov, Maxim  and
+      Koncha, Kirill  and
+      Fenogenova, Alena  and
+      Artemova, Ekaterina  and
+      Mikhailov, Vladislav",
+    editor = "Al-Onaizan, Yaser  and
+      Bansal, Mohit  and
+      Chen, Yun-Nung",
+    booktitle = "Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing",
+    month = nov,
+    year = "2024",
+    address = "Miami, Florida, USA",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2024.emnlp-main.522/",
+    doi = "10.18653/v1/2024.emnlp-main.522",
+    pages = "9268--9299",
+    abstract = "Minimal pairs are a well-established approach to evaluating the grammatical knowledge of language models. However, existing resources for minimal pairs address a limited number of languages and lack diversity of language-specific grammatical phenomena. This paper introduces the Russian Benchmark of Linguistic Minimal Pairs (RuBLiMP), which includes 45k pairs of sentences that differ in grammaticality and isolate a morphological, syntactic, or semantic phenomenon. In contrast to existing benchmarks of linguistic minimal pairs, RuBLiMP is created by applying linguistic perturbations to automatically annotated sentences from open text corpora and decontaminating test data. We describe the data collection protocol and present the results of evaluating 25 language models in various scenarios. We find that the widely used LMs for Russian are sensitive to morphological and agreement-oriented contrasts, but fall behind humans on phenomena requiring the understanding of structural relations, negation, transitivity, and tense. RuBLiMP, the codebase, and other materials are publicly available."
 }
 ```
 
