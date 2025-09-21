@@ -58,10 +58,11 @@ class Scorer:
             a HuggingFace model name
         """
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = (
-            AutoModelForMaskedLM.from_pretrained(self.model_name).cuda().eval()
+            AutoModelForMaskedLM.from_pretrained(self.model_name).to(self.device).eval()
             if "bert" in self.model_name.lower()
-            else AutoModelForCausalLM.from_pretrained(self.model_name).cuda().eval()
+            else AutoModelForCausalLM.from_pretrained(self.model_name).to(self.device).eval()
         )
         return model, tokenizer
 
@@ -80,10 +81,7 @@ class Scorer:
         token_log_probs = []
         MASK = self.tokenizer.mask_token_id
         with torch.no_grad():
-            inputs = self.tokenizer(sentence, return_tensors="pt")
-            if torch.cuda.is_available():
-                for k, v in inputs.items():
-                    inputs[k] = v.cuda()
+            inputs = self.tokenizer(sentence, return_tensors="pt").to(self.device)
             # skip first ([CLS]) and last ([SEP]) tokens for for loop
             for i in range(1, len(inputs["input_ids"][-1]) - 1, 1):
                 # store a copy of token_id at mask_index position
@@ -109,16 +107,17 @@ class Scorer:
         :param tokenizer: AutoTokenizer
             the model tokenizer
         """
-        sentence = "</s>{}".format(sentence)
-        input_ids = torch.tensor(self.tokenizer.encode(sentence)).unsqueeze(0).cuda()
+        sentence = "</s>" + sentence
+        inputs = self.tokenizer(sentence, return_tensors="pt").to(self.device)
         with torch.no_grad():
-            outputs = self.model(input_ids, labels=input_ids)
-        loss, logits = outputs[:2]
+            outputs = self.model(**inputs, labels=inputs["input_ids"])
+        loss = outputs.loss
+        logits = outputs.logits
 
         # Apply softmax to the logits to get probabilities
         probabilities = torch.nn.functional.log_softmax(logits, dim=-1)
         all_prob = []
-        input_ids_processed = input_ids[0][1:]
+        input_ids_processed = inputs["input_ids"][0][1:]
         for i, token_id in enumerate(input_ids_processed):
             probability = probabilities[0, i, token_id].item()
             all_prob.append(probability)
@@ -162,5 +161,6 @@ class Scorer:
         ):
             scored_example = self.score_with_min_k(example=example)
             scored_examples.append(scored_example)
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         return pd.DataFrame(scored_examples)
