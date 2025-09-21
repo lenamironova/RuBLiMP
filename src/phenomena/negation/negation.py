@@ -6,7 +6,7 @@ from typing import List, Dict, Optional, Any
 from phenomena.min_pair_generator import MinPairGenerator
 from phenomena.negation.constants import NEGATIVE_PRONOUNS, PRONOUNS_NEGATIVE
 from utils.constants import ASPECT_VERBS
-from utils.utils import unify_alphabet, capitalize_word
+from utils.utils import reindex_sentence, sub_word, unify_alphabet, capitalize_word
 from string import punctuation
 
 
@@ -194,6 +194,7 @@ class Negation(MinPairGenerator):
                 -> *Mama kogda-libo ne myla ramu. ('Mom ever has not washed the [window] frame.')
         """
         changed_sentences = []
+        reindex_sentence(sentence)
         for token in sentence:
             negation = False
             verb_id = None
@@ -284,7 +285,7 @@ class Negation(MinPairGenerator):
                     if token["form"].startswith("что"):
                         new_word = "ничего"
                     new_word = capitalize_word(token["form"], new_word)
-                    new_sentence[token["id"] - 1] = new_word
+                    new_sentence[token["new_id"] - 1] = sub_word(new_sentence[token["new_id"] - 1], new_word)
                     new_sentence = " ".join(new_sentence)
                     if token["feats"] is None:
                         token["feats"] = {}

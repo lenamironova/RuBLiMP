@@ -1,9 +1,37 @@
 import conllu
 import pymorphy2
 import numpy as np
+import re
 from typing import List, Dict, Optional, Union, Callable
+from string import punctuation
+punctuation_more = punctuation + r"…’–°№“”«»"
 
 from utils.constants import GRAMEVAL2PYMORPHY
+
+
+def reindex_sentence(sentence: conllu.TokenList):
+    """
+    Обновить id токенов в предложении, чтобы они сопоставлялись с токенизацией по пробелам
+    """
+    i = sentence[0]['id']
+    if isinstance(i, tuple): i = i[0]
+    from_to = {}
+    for token in sentence:
+        from_to[token['id']] = i
+        token['new_id'] = i
+        if (not token['misc']) or token['misc'].get('SpaceAfter') != 'No': i+=1
+    for token in sentence:
+        token["new_head"] = from_to.get(token["head"], 0)
+
+
+def sub_word(orig_word: str, new_word: str):
+    """
+    Заменить старое слово на новое с сохранением смежной окружающей пунктуации
+    """
+    pattern = r"^([{}]*)(.+?)([{}]*)$".format(punctuation_more, punctuation_more)
+    res = re.sub(pattern, r"\1" + new_word + r"\3", orig_word, count=1)
+    # print(orig_word, ">", res)
+    return res
 
 
 def getcapital(s: str) -> List[int]:

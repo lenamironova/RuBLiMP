@@ -13,6 +13,8 @@ from .utils import (
     update_feats,
 )
 from utils.utils import (
+    reindex_sentence,
+    sub_word,
     capitalize_word,
     get_dependencies,
     get_pymorphy_parse,
@@ -360,6 +362,8 @@ class Tense(MinPairGenerator):
         # a dictionary of all the dependencies
         deprels = get_dependencies(sentence)
 
+        reindex_sentence(sentence)
+
         for token in sentence:
             # check if token is a verb with required features
             verb_tense = self.check_verb(token, deprels)
@@ -409,12 +413,10 @@ class Tense(MinPairGenerator):
             new_verb = new_verb.word
 
             # update sentence
-            new_sentence = [
-                capitalize_word(t["form"], new_verb)
-                if t["id"] == token["id"]
-                else t["form"]
-                for t in sentence
-            ]
+            new_sentence = sentence.metadata["text"].split(" ")
+            new_word = capitalize_word(token["form"], new_verb)
+            change_idx = token["new_id"]-1
+            new_sentence[change_idx] = sub_word(new_sentence[change_idx], new_word)
             new_sentence = " ".join(new_sentence)
 
             source_features = deepcopy(token["feats"])
@@ -453,7 +455,11 @@ class Tense(MinPairGenerator):
         # a dictionary of all the dependencies
         deprels = get_dependencies(sentence)
 
+        reindex_sentence(sentence)
+
         for token in sentence:
+            if not token["head"]: continue
+            
             # get token head
             token_head = sentence[token["head"] - 1]
 
@@ -568,12 +574,10 @@ class Tense(MinPairGenerator):
                 source_features["TenseMarker"] = full_marker
 
             # update sentence
-            new_sentence = [
-                capitalize_word(t["form"], new_token)
-                if t["id"] == token_id
-                else t["form"]
-                for t in sentence
-            ]
+            new_sentence = sentence.metadata["text"].split(" ")
+            new_word = capitalize_word(token["form"], new_token)
+            change_idx = sentence[token_id-1]["new_id"]-1
+            new_sentence[change_idx] = sub_word(new_sentence[change_idx], new_word)
             new_sentence = " ".join(new_sentence)
 
             # update target token features

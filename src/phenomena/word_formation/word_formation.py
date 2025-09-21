@@ -5,7 +5,7 @@ import pandas as pd
 import pymorphy2
 from typing import List, Dict, Optional, Tuple, Any, Union
 from phenomena.min_pair_generator import MinPairGenerator
-from utils.utils import capitalize_word, unify_alphabet, get_list_safe
+from utils.utils import reindex_sentence, sub_word, capitalize_word, unify_alphabet, get_list_safe
 from utils.constants import (
     VOWELS,
     MINUS_VOICE,
@@ -116,6 +116,7 @@ class WordFormation(MinPairGenerator):
                 -> *Vasya zabyl prozapisat' domashnee zadanie. ('Vasya forgot to repeatedly write down the homework.')
         """
         changed_sentences = []
+        reindex_sentence(sentence)
         for token in sentence:
             if token["upos"] != "VERB":
                 continue
@@ -232,6 +233,7 @@ class WordFormation(MinPairGenerator):
                 -> *Petya upodstal na rabote. ('Petya slightly got tired at work.')
         """
         changed_sentences = []
+        reindex_sentence(sentence)
         for token in sentence:
             if token["upos"] != "VERB":
                 continue
@@ -318,6 +320,7 @@ class WordFormation(MinPairGenerator):
                 -> *Vodoprovodistnaya** voda ispol'zuetsya tol'ko dlya rukomojnikov i v celyah prigotovleniya pishchi. ('Tapous water is used only for washing basins and food preparation purposes.')
         """
         changed_sentences = []
+        reindex_sentence(sentence)
         for token in sentence:
             if token["upos"] not in self.pos_add_suffix:
                 continue
@@ -534,7 +537,7 @@ class WordFormation(MinPairGenerator):
         """
         new_word = capitalize_word(old_word, new_word)
         new_sentence = sentence.metadata["text"].split()
-        new_sentence[word_id] = new_word
+        new_sentence[sentence[word_id]["new_id"]-1] = sub_word(new_sentence[sentence[word_id]["new_id"]-1], new_word)
         new_sentence = " ".join(new_sentence)
         try:
             feats = token_feats.copy()

@@ -4,7 +4,7 @@ import os
 import pymorphy2
 from typing import List, Dict, Optional, Any, Union
 from phenomena.min_pair_generator import MinPairGenerator
-from utils.utils import unify_alphabet, capitalize_word
+from utils.utils import reindex_sentence, sub_word, unify_alphabet, capitalize_word
 
 
 class Reflexives(MinPairGenerator):
@@ -46,6 +46,7 @@ class Reflexives(MinPairGenerator):
                 -> *U sebya est' mashina. ('Self have a car (lut. By self is a car).')
         """
         changed_sentences = []
+        reindex_sentence(sentence)
         for token in sentence:
             if token["upos"] not in self.pos:
                 continue
@@ -94,7 +95,7 @@ class Reflexives(MinPairGenerator):
             new_word = "себя"
             new_sentence = sentence.metadata["text"].split(" ")
             new_word = unify_alphabet(new_word)
-            new_sentence[token["id"] - 1] = new_word
+            new_sentence[token["new_id"] - 1] = sub_word(new_sentence[token["new_id"] - 1], new_word)
             new_sentence = " ".join(new_sentence)
             if token["feats"] is not None:
                 feats = token["feats"].copy()

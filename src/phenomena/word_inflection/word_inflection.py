@@ -5,7 +5,7 @@ import pandas as pd
 import pymorphy2
 from typing import List, Dict, Optional, Tuple, Any, Union
 from phenomena.min_pair_generator import MinPairGenerator
-from utils.utils import capitalize_word, unify_alphabet, get_list_safe
+from utils.utils import reindex_sentence, sub_word, capitalize_word, unify_alphabet, get_list_safe
 from utils.constants import (
     VOWELS,
     MINUS_VOICE,
@@ -68,6 +68,7 @@ class WordInflection(MinPairGenerator):
           -> *On chitait knigu. ('He is read the book.')
         """
         changed_sentences = []
+        reindex_sentence(sentence)
         for token in sentence:
             if token["upos"] != "VERB":
                 continue
@@ -112,6 +113,7 @@ class WordInflection(MinPairGenerator):
                 -> U nego net stoli. ('He does not have a tabl.')
         """
         changed_sentences = []
+        reindex_sentence(sentence)
         for token in sentence:
             if token["upos"] != "NOUN":
                 continue
@@ -170,7 +172,7 @@ class WordInflection(MinPairGenerator):
         """
         new_word = capitalize_word(old_word, new_word)
         new_sentence = sentence.metadata["text"].split()
-        new_sentence[word_id] = new_word
+        new_sentence[sentence[word_id]["new_id"]-1] = sub_word(new_sentence[sentence[word_id]["new_id"]-1], new_word)
         new_sentence = " ".join(new_sentence)
         try:
             feats = token_feats.copy()

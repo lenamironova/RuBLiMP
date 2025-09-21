@@ -11,7 +11,7 @@ from phenomena.aspect.constants import (
     SINGLE_REPETITION,
 )
 from utils.constants import ASPECT_VERBS, FREQ_DICT
-from utils.utils import unify_alphabet, capitalize_word
+from utils.utils import reindex_sentence, sub_word, unify_alphabet, capitalize_word
 
 
 class Aspect(MinPairGenerator):
@@ -51,6 +51,7 @@ class Aspect(MinPairGenerator):
                 -> *Mame ne stoit pomyt' ramu. ('Mom shouldn't washed the [window] frame.')
         """
         changed_sentences = []
+        reindex_sentence(sentence)
         for token in sentence:
             if token["upos"] == "PART" and token["lemma"] == "не":
                 verb_id = token["head"] - 1
@@ -78,7 +79,7 @@ class Aspect(MinPairGenerator):
                             and sentence[i]["feats"]["Aspect"] == "Imp"
                             and sentence[i]["head"] == verb_id + 1
                         ):
-                            change_idx = i
+                            change_idx = sentence[i]["new_id"]-1
                             word = self.get_best_ipm(sentence[i]["lemma"])
                             if word is None:
                                 continue
@@ -88,7 +89,7 @@ class Aspect(MinPairGenerator):
                                 sentence[i]["form"], new_verb
                             ):
                                 continue
-                            new_sentence[i] = new_verb
+                            new_sentence[change_idx] = sub_word(new_sentence[change_idx], new_verb)
                             if (
                                 self.check_comparative(sentence[i]["id"], sentence)
                                 is not None
@@ -139,6 +140,7 @@ class Aspect(MinPairGenerator):
                 -> *Petya dolgo reshil zadachu. ('Petya has solved the task for a long time.')
         """
         changed_sentences = []
+        reindex_sentence(sentence)
         for token in sentence:
             if token["form"] in [
                 "продолжаться",
@@ -184,7 +186,7 @@ class Aspect(MinPairGenerator):
                 new_verb = capitalize_word(token["form"], new_verb)
                 if not self.check_postfix_verbs(token["form"], new_verb):
                     continue
-                new_sentence[token["id"] - 1] = new_verb
+                new_sentence[token["new_id"] - 1] = new_verb
                 new_sentence = " ".join(new_sentence)
                 feats = token["feats"].copy()
                 feats["adverb_lemma"] = adverb
@@ -226,6 +228,7 @@ class Aspect(MinPairGenerator):
                 -> *On pobegal (perfective) kazhdyj den'. ('He has ran every day.')
         """
         changed_sentences = []
+        reindex_sentence(sentence)
         for token in sentence:
             if token["form"] in [
                 "продолжаться",
@@ -270,7 +273,7 @@ class Aspect(MinPairGenerator):
                     continue
                 if self.check_comparative(token["id"], sentence) is not None:
                     continue
-                new_sentence[token["id"] - 1] = new_verb
+                new_sentence[token["new_id"] - 1] = new_verb
                 new_sentence = " ".join(new_sentence)
                 feats = token["feats"].copy()
                 feats["repetition_adverb"] = repetition_word

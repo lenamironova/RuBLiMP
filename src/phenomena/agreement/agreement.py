@@ -36,6 +36,8 @@ from phenomena.min_pair_generator import (
     MinPairGenerator
 )
 from utils.utils import (
+    reindex_sentence,
+    sub_word,
     capitalize_word,
     unify_alphabet,
     get_constituent,
@@ -894,7 +896,7 @@ class Agreement(MinPairGenerator):
         exclude_dash_nominal_subj=True,
     ):
         super().__init__(name=name)
-        self.main_feats = ["id", "form", "lemma",  "upos", "head", "deprel"]
+        self.main_feats = ["id", "new_id", "form", "lemma",  "upos", "head", "deprel"]
         self.small_feats = ["Case", "Gender", "Person", "Number",
                             "Animacy",
                             "Tense", "VerbForm", "Variant"]
@@ -1993,7 +1995,7 @@ class Agreement(MinPairGenerator):
                     for value in rel_member_param_options:
                         new_id = f"{c_id}_{changed_kind}_{to_alter['main']['id']}_{feature}_{value}"
                         # print(new_id)
-                        sentence_new = list(sentence)
+                        sentence_new = sentence.metadata["text"].split(" ")
 
                         # we inflect properly, accounting for animacy and gender
                         #   (animacy: inanimate `вижу **красивую** розу` ->
@@ -2171,8 +2173,9 @@ class Agreement(MinPairGenerator):
                             altered=True
                         )
 
-                        sentence_new[to_alter["main"]["id"] - 1] = new_rel_member
-                        target_sentence = " ".join(tok["form"] for tok in sentence_new)
+                        idx_to_alter = to_alter["main"]["new_id"] - 1
+                        sentence_new[idx_to_alter] = sub_word(sentence_new[idx_to_alter], new_rel_member["form"])
+                        target_sentence = " ".join(sentence_new)
                         # print(f"saving {target_sentence}")
                         new_contr_agreer.update({
                             "source_word": old_form,
@@ -2407,6 +2410,7 @@ class Agreement(MinPairGenerator):
         self, sentence: conllu.models.TokenList, return_df: bool
     ) -> List[Dict[str, Any]]:
         try:
+            reindex_sentence(sentence)
             controllers_targets_orig = self.check_agreement(sentence, self.REL2CHECKER)
             controllers_targets_altered = self.alternate_agreement(controllers_targets_orig, sentence)
             pairs = self.flatten_agr_res(controllers_targets_altered, sentence)

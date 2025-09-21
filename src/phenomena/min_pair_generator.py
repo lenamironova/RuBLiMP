@@ -33,14 +33,17 @@ class MinPairGenerator(ABC):
         data = self.read_data(datapath)
         generated_data = []
         for i_checking, sent in enumerate(tqdm(data)):
-            if i_checking >= max_samples:
+            # if i_checking >= max_samples:
+            if len(generated_data) >= max_samples:
                 break
             
             # fallback
             try:
                 min_pairs = self.get_minimal_pairs(sent, False)
             except Exception as e:
-                print(e)
+                raise e
+                print(e.__class__.__name__, e)
+                print(e.__traceback__.tb_frame)
                 min_pairs = None
 
             if min_pairs is not None:
@@ -64,6 +67,7 @@ class MinPairGenerator(ABC):
         """
         Generates annotation dictionary for sentence
         """
+        if isinstance(target_sentence, conllu.TokenList): target_sentence = target_sentence.metadata["text"]
         generated_dict = {
             "sentence_id": sentence.metadata["sent_id"],
             "source_sentence": unify_alphabet(sentence.metadata["text"]),

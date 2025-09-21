@@ -5,7 +5,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from phenomena.min_pair_generator import MinPairGenerator
 from phenomena.government.constants import ADP_CASES, WH_STOP, MODAL_VERBS
 from utils.constants import GRAMEVAL2PYMORPHY, PYMORPHY2GRAMEVAL
-from utils.utils import capitalize_word, unify_alphabet
+from utils.utils import reindex_sentence, sub_word, capitalize_word, unify_alphabet
 
 
 class Government(MinPairGenerator):
@@ -71,12 +71,14 @@ class Government(MinPairGenerator):
         pymorphy_cases = list(GRAMEVAL2PYMORPHY.values())
         pymorphy_cases = [case_ for case_ in pymorphy_cases if case_ not in stop_cases]
         changed_sentences = []
+        reindex_sentence(sentence)
         stop_ids = self.get_stop_ids(sentence)
         for token in sentence:
             if self.check_dependencies(token["id"], sentence, self.stop_pos):
                 continue
             if self.has_quotes(token["id"], sentence):
                 continue
+            if not token["head"]: continue
             if sentence[token["head"] - 1]["upos"] != "VERB":
                 continue
             if (
@@ -149,7 +151,7 @@ class Government(MinPairGenerator):
                                     sentence,
                                     token["form"],
                                     new_word,
-                                    token["id"] - 1,
+                                    token["new_id"] - 1,
                                     verb_id,
                                     token["feats"],
                                     case_,
@@ -183,6 +185,7 @@ class Government(MinPairGenerator):
         """
         endings = "ние"
         changed_sentences = []
+        reindex_sentence(sentence)
         stop_ids = self.get_stop_ids(sentence)
         stop_cases_overlap = {
             "ablt": ["gent", "gen2", "ablt"],
@@ -214,6 +217,7 @@ class Government(MinPairGenerator):
                     continue
                 if self.check_mods(token["id"], sentence, self.deprels_stop):
                     continue
+                if not sentence[word_id]["head"]: continue
                 if (
                     sentence[sentence[word_id]["head"] - 1]["form"].endswith("ся")
                     or sentence[sentence[word_id]["head"] - 1]["form"].endswith("сь")
@@ -262,7 +266,7 @@ class Government(MinPairGenerator):
                                 sentence,
                                 token["form"],
                                 new_word,
-                                token["id"] - 1,
+                                token["new_id"] - 1,
                                 token["head"] - 1,
                                 token["feats"],
                                 case_,
@@ -295,6 +299,7 @@ class Government(MinPairGenerator):
                 -> *Petya prishel k Mashey (ins). ('Petya came via Masha.')
         """
         changed_sentences = []
+        reindex_sentence(sentence)
         stop_ids = self.get_stop_ids(sentence)
         stop_cases = ["nomn", "gent", "gen2", "accs"]
         stop_cases_overlap = {
@@ -320,6 +325,7 @@ class Government(MinPairGenerator):
                     sentence[word_id]["id"], sentence, new_stop_pos
                 ):
                     continue
+                if not sentence[word_id]["head"]: continue
                 if sentence[sentence[word_id]["head"] - 1]["upos"] != "VERB":
                     continue
                 if sentence[sentence[word_id]["head"] - 1]["form"].endswith(
@@ -420,7 +426,7 @@ class Government(MinPairGenerator):
                                 sentence,
                                 sentence[word_id]["form"],
                                 new_word,
-                                word_id,
+                                sentence[word_id]["new_id"] - 1,
                                 sentence[word_id]["head"] - 1,
                                 sentence[word_id]["feats"],
                                 case_,
@@ -455,12 +461,14 @@ class Government(MinPairGenerator):
         """
         stop_cases = ["accs", "nomn"]
         changed_sentences = []
+        reindex_sentence(sentence)
         stop_ids = self.get_stop_ids(sentence)
         pymorphy_cases = list(GRAMEVAL2PYMORPHY.values())
         pymorphy_cases = [case_ for case_ in pymorphy_cases if case_ not in stop_cases]
         for token in sentence:
             if self.check_dependencies(token["id"], sentence, self.stop_pos):
                 continue
+            if not token["head"]: continue
             if sentence[token["head"] - 1]["upos"] != "VERB":
                 continue
             if (
@@ -533,7 +541,7 @@ class Government(MinPairGenerator):
                                     sentence,
                                     token["form"],
                                     new_word,
-                                    token["id"] - 1,
+                                    token["new_id"] - 1,
                                     verb_id,
                                     token["feats"],
                                     case_,
@@ -566,6 +574,7 @@ class Government(MinPairGenerator):
                 -> *Petya zhdet ispolneniem (ins) zhelanij. ('Petya is waiting by the fulfillment of [his] wishes.')
         """
         stop_cases = ["gent", "gen2", "accs", "datv", "nomn"]
+        reindex_sentence(sentence)
         stop_ids = self.get_stop_ids(sentence)
         changed_sentences = []
         changed_sentences = []
@@ -574,6 +583,7 @@ class Government(MinPairGenerator):
         for token in sentence:
             if self.check_dependencies(token["id"], sentence, self.stop_pos):
                 continue
+            if not token["head"]: continue
             if sentence[token["head"] - 1]["upos"] != "VERB":
                 continue
             if (
@@ -646,7 +656,7 @@ class Government(MinPairGenerator):
                                     sentence,
                                     token["form"],
                                     new_word,
-                                    token["id"] - 1,
+                                    token["new_id"] - 1,
                                     verb_id,
                                     token["feats"],
                                     case_,
@@ -700,7 +710,7 @@ class Government(MinPairGenerator):
         """
         new_word = capitalize_word(old_word, new_word)
         new_sentence = sentence.metadata["text"].split()
-        new_sentence[old_word_id] = new_word
+        new_sentence[old_word_id] = sub_word(new_sentence[old_word_id], new_word)
         new_sentence = " ".join(new_sentence)
         feats = token_feats.copy()
         feats["government_form"] = unify_alphabet(sentence[verb_id]["form"])

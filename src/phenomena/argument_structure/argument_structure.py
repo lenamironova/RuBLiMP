@@ -10,6 +10,8 @@ from typing import List, Dict, Any, Optional, Tuple
 
 from phenomena.min_pair_generator import MinPairGenerator
 from utils.utils import (
+    reindex_sentence,
+    sub_word,
     get_dependencies,
     get_pymorphy_parse,
     get_conjuncts,
@@ -84,7 +86,8 @@ class ArgumentStructure(MinPairGenerator):
             & (vocab["pt:set"] != 1)
             & (vocab["t:space"] != 1)
             & (vocab["t:topon"] != 1)
-        ]
+        ].reset_index()
+        # print(self.nouns.head())
         self.nouns["len"] = self.nouns["lemma"].apply(len)
 
         if self.use_similarity:
@@ -158,6 +161,8 @@ class ArgumentStructure(MinPairGenerator):
         # a dictionary of all the dependencies
         deprels = get_dependencies(sentence)
 
+        reindex_sentence(sentence)
+
         for token in sentence:
             parse = check_verb(token, self.morph)
             if not parse:
@@ -179,10 +184,10 @@ class ArgumentStructure(MinPairGenerator):
             if not new_verb:
                 continue
 
-            new_sentence = [
-                capitalize_word(t, new_verb) if t["id"] == token["id"] else t["form"]
-                for t in sentence
-            ]
+            new_sentence = sentence.metadata["text"].split(" ")
+            new_verb = capitalize_word(token, new_verb)
+            verb_idx = token["new_id"]-1
+            new_sentence[verb_idx] = sub_word(new_sentence[verb_idx], new_verb)
             new_sentence = " ".join(new_sentence)
 
             source_features = token["feats"].copy()
@@ -223,6 +228,8 @@ class ArgumentStructure(MinPairGenerator):
 
         # a dictionary of all the dependencies
         deprels = get_dependencies(sentence)
+
+        reindex_sentence(sentence)
 
         for token in sentence:
             parse = check_verb(token, self.morph)
@@ -277,14 +284,13 @@ class ArgumentStructure(MinPairGenerator):
                     if not new_subj or not new_obj:
                         pass
                     else:
-                        new_sentence = [
-                            capitalize_word(t, new_subj, obj["upos"])
-                            if t["id"] == subj["id"]
-                            else capitalize_word(t, new_obj, subj["upos"])
-                            if t["id"] == obj["id"]
-                            else t["form"]
-                            for t in sentence
-                        ]
+                        new_sentence = sentence.metadata["text"].split(" ")
+                        new_obj = capitalize_word(obj, new_obj, obj["upos"])
+                        obj_idx = obj["new_id"]-1
+                        new_sentence[obj_idx] = sub_word(new_sentence[obj_idx], new_obj)
+                        new_subj = capitalize_word(subj, new_subj, subj["upos"])
+                        subj_idx = subj["new_id"]-1
+                        new_sentence[subj_idx] = sub_word(new_sentence[subj_idx], new_subj)
                         new_sentence = " ".join(new_sentence)
 
                         source_features = subj["feats"].copy()
@@ -313,10 +319,10 @@ class ArgumentStructure(MinPairGenerator):
             if not new_subj:
                 continue
 
-            new_sentence = [
-                capitalize_word(t, new_subj) if t["id"] == subj["id"] else t["form"]
-                for t in sentence
-            ]
+            new_sentence = sentence.metadata["text"].split(" ")
+            new_word = capitalize_word(subj, new_subj)
+            change_idx = subj["new_id"]-1
+            new_sentence[change_idx] = sub_word(new_sentence[change_idx], new_word)
 
             new_sentence = " ".join(new_sentence)
 
@@ -358,6 +364,8 @@ class ArgumentStructure(MinPairGenerator):
 
         # a dictionary of all the dependencies
         deprels = get_dependencies(sentence)
+
+        reindex_sentence(sentence)
 
         for token in sentence:
             parse = check_verb(token, self.morph, allow_part=True)
@@ -412,14 +420,13 @@ class ArgumentStructure(MinPairGenerator):
                     if not new_subj or not new_agent:
                         pass
                     else:
-                        new_sentence = [
-                            capitalize_word(t, new_agent, subj["upos"])
-                            if t["id"] == agent["id"]
-                            else capitalize_word(t, new_subj, agent["upos"])
-                            if t["id"] == subj["id"]
-                            else t["form"]
-                            for t in sentence
-                        ]
+                        new_sentence = sentence.metadata["text"].split(" ")
+                        new_agent = capitalize_word(agent, new_agent)
+                        agent_idx = agent["new_id"]-1
+                        new_sentence[agent_idx] = sub_word(new_sentence[agent_idx], new_agent)
+                        new_subj = capitalize_word(subj, new_subj)
+                        subj_idx = subj["new_id"]-1
+                        new_sentence[subj_idx] = sub_word(new_sentence[subj_idx], new_subj)
                         new_sentence = " ".join(new_sentence)
 
                         source_features = agent["feats"].copy()
@@ -449,10 +456,10 @@ class ArgumentStructure(MinPairGenerator):
             if not new_agent:
                 continue
 
-            new_sentence = [
-                capitalize_word(t, new_agent) if t["id"] == agent["id"] else t["form"]
-                for t in sentence
-            ]
+            new_sentence = sentence.metadata["text"].split(" ")
+            new_agent = capitalize_word(agent, new_agent)
+            agent_idx = agent["new_id"]-1
+            new_sentence[agent_idx] = sub_word(new_sentence[agent_idx], new_agent)
             new_sentence = " ".join(new_sentence)
 
             source_features = agent["feats"].copy()
@@ -493,6 +500,8 @@ class ArgumentStructure(MinPairGenerator):
 
         # a dictionary of all the dependencies
         deprels = get_dependencies(sentence)
+
+        reindex_sentence(sentence)
 
         for token in sentence:
             parse = check_verb(token, self.morph)
@@ -557,14 +566,13 @@ class ArgumentStructure(MinPairGenerator):
                     if not new_obj or not new_iobj:
                         pass
                     else:
-                        new_sentence = [
-                            capitalize_word(t, new_obj, iobj["upos"])
-                            if t["id"] == obj["id"]
-                            else capitalize_word(t, new_iobj, obj["upos"])
-                            if t["id"] == iobj["id"]
-                            else t["form"]
-                            for t in sentence
-                        ]
+                        new_sentence = sentence.metadata["text"].split(" ")
+                        new_iobj = capitalize_word(iobj, new_iobj, iobj["upos"])
+                        iobj_idx = iobj["new_id"]-1
+                        new_sentence[iobj_idx] = sub_word(new_sentence[iobj_idx], new_iobj)
+                        new_obj = capitalize_word(obj, new_obj, obj["upos"])
+                        obj_idx = obj["new_id"]-1
+                        new_sentence[obj_idx] = sub_word(new_sentence[obj_idx], new_obj)
                         new_sentence = " ".join(new_sentence)
 
                         source_features = iobj["feats"].copy()
@@ -594,10 +602,10 @@ class ArgumentStructure(MinPairGenerator):
             if not new_iobj:
                 continue
 
-            new_sentence = [
-                capitalize_word(t, new_iobj) if t["id"] == iobj["id"] else t["form"]
-                for t in sentence
-            ]
+            new_sentence = sentence.metadata["text"].split(" ")
+            new_iobj = capitalize_word(iobj, new_iobj)
+            iobj_idx = iobj["new_id"]-1
+            new_sentence[iobj_idx] = sub_word(new_sentence[iobj_idx], new_iobj)
             new_sentence = " ".join(new_sentence)
 
             source_features = iobj["feats"].copy()
@@ -637,6 +645,8 @@ class ArgumentStructure(MinPairGenerator):
 
         # a dictionary of all the dependencies
         deprels = get_dependencies(sentence)
+
+        reindex_sentence(sentence)
 
         for token in sentence:
             parse = check_verb(token, self.morph)
@@ -696,10 +706,10 @@ class ArgumentStructure(MinPairGenerator):
             if not new_obj:
                 continue
 
-            new_sentence = [
-                capitalize_word(t, new_obj) if t["id"] == obj["id"] else t["form"]
-                for t in sentence
-            ]
+            new_sentence = sentence.metadata["text"].split(" ")
+            new_obj = capitalize_word(obj, new_obj)
+            obj_idx = obj["new_id"]-1
+            new_sentence[obj_idx] = sub_word(new_sentence[obj_idx], new_obj)
             new_sentence = " ".join(new_sentence)
 
             source_features = obj["feats"].copy()
