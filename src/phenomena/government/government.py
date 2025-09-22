@@ -814,43 +814,31 @@ class Government(MinPairGenerator):
         sentence: conllu.models.TokenList,
         old_word: str,
         new_word: str,
-        old_word_id: int,   # это token["new_id"] - 1
-        verb_id: int,       # сюда обычно приходит head-1; ниже переведём в new_id-1
+        old_word_id: int, 
+        verb_id: int,       
         token_feats: Dict[str, str],
          new_case: str,
     ):
-        """
-        Меняет слово на new_word и возвращает (new_word_cap, new_sentence_text, feats, new_feats).
-        Делает привязку по new_id, а не по split() исходного текста.
-        """
-        # 1) берём только «реальные» токены (без multiword/empty)
         real_tokens = [tok for tok in sentence if isinstance(tok, dict) and "form" in tok]
         surface = [tok["form"] for tok in real_tokens]
 
-        # 2) карта: позиция в surface по new_id-1
         pos_by_newid = {tok["new_id"] - 1: i for i, tok in enumerate(real_tokens)}
 
-        # 3) позиция заменяемого слова
         pos_word = pos_by_newid.get(old_word_id)
 
-        # 4) аккуратно получаем позицию глагола: переводим исходный verb_id в new_id-1
         if 0 <= verb_id < len(sentence) and isinstance(sentence[verb_id], dict):
             verb_newid_minus1 = sentence[verb_id].get("new_id", verb_id) - 1
         else:
             verb_newid_minus1 = verb_id
         pos_verb = pos_by_newid.get(verb_newid_minus1)
 
-        # 5) если что-то не сошлось — просто не генерируем пару для этого предложения
-        # (кидаем исключение, которое перехватит верхний уровень и "continue")
         if pos_word is None or pos_verb is None:
-            raise RuntimeError("align-failed")  # или верните None, если у вас уже стоит try/except
+            raise RuntimeError("align-failed")
 
-        # 6) замена с учётом капитализации
         new_word_cap = capitalize_word(old_word, new_word)
         surface[pos_word] = sub_word(surface[pos_word], new_word_cap)
         new_sentence_text = " ".join(surface)
 
-        # 7) фичи
         feats = token_feats.copy()
         feats["government_form"] = unify_alphabet(surface[pos_verb])
         new_feats = feats.copy()
