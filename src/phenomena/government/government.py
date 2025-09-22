@@ -169,6 +169,121 @@ class Government(MinPairGenerator):
                                 )
                                 changed_sentences.append(changed_sentence)
         return changed_sentences
+    
+    def change_obj_dat_case(
+        self,
+        sentence: conllu.models.TokenList,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Finds sentences with verbs' direct object in dative case, changes dative to
+        other cases (except nom, gen, and acc), checks the violated form to not overlap with any plural
+        form of the word.
+
+        Example:
+            Masha meshala mame (dat). ('Masha desterbed her mother.')
+                -> *Masha meshala mamoi (dat). ('Masha desterbed with her mother.')
+        """
+        stop_cases = ["accs", "nomn", "gent", "gen2", "datv"]
+        changed_sentences = []
+        pymorphy_cases = list(GRAMEVAL2PYMORPHY.values())
+        pymorphy_cases = [case_ for case_ in pymorphy_cases if case_ not in stop_cases]
+        changed_sentences = []
+        reindex_sentence(sentence)
+        stop_ids = self.get_stop_ids(sentence)
+        for token in sentence:
+            if self.check_dependencies(token["id"], sentence, self.stop_pos):
+                continue
+            if self.has_quotes(token["id"], sentence):
+                continue
+            if not token["head"]: continue
+            if sentence[token["head"] - 1]["upos"] != "VERB":
+                continue
+            if (
+                token["id"] not in stop_ids
+                and token["feats"] is not None
+                and "Case" in token["feats"]
+            ) and (
+                token["upos"] in self.pos_list
+                or (
+                    token["upos"] == "VERB"
+                    and "VerbForm" in token["feats"]
+                    and token["feats"]["VerbForm"] == "Part"
+                )
+            ):
+                verb_id = token["head"] - 1
+                if token["lemma"] in WH_STOP:
+                    continue
+                if sentence[verb_id]["form"].endswith("ся") or sentence[verb_id][
+                    "form"
+                ].endswith("сь"):
+                    continue
+                if (
+                    sentence[verb_id]["feats"] is not None
+                    and "VerbForm" in sentence[verb_id]["feats"]
+                    and sentence[verb_id]["feats"]["VerbForm"] == "Inf"
+                ):
+                    continue
+                if sentence[verb_id]["lemma"] in MODAL_VERBS:
+                    continue
+                if token.get("deprel") in {"obj", "iobj", "obl"}:
+                    if (
+                        sentence[verb_id]["upos"] == "VERB"
+                        and token["feats"]["Case"] == "Dat"
+                    ):
+                        word_case = "datv"
+                        if self.check_mods(token["id"], sentence, self.deprels_stop):
+                            continue
+                        parse_word = self.check_pymorphy_variants(token)
+                        if parse_word is None:
+                            continue
+                        stop_forms = self.get_opposite_number_forms(token, parse_word)
+                        for case_ in stop_cases:
+                            stop_form = parse_word.inflect({case_})
+                            if (
+                                stop_form is not None
+                                and stop_form.word not in stop_forms
+                            ):
+                                stop_forms.append(stop_form.word)
+                        for case_ in pymorphy_cases:
+                            if parse_word.inflect({case_}) is not None:
+                                new_word = parse_word.inflect({case_}).word
+                            else:
+                                continue
+                            if not self.morph.word_is_known(new_word):
+                                continue
+                            if (
+                                new_word != token["form"].lower()
+                                and new_word not in stop_forms
+                            ):
+                                stop_forms.append(new_word)
+                                token["feats"]["upos"] = token["upos"]
+                                (
+                                    new_word,
+                                    new_sentence,
+                                    feats,
+                                    new_feats,
+                                ) = self.change_sentence(
+                                    sentence,
+                                    token["form"],
+                                    new_word,
+                                    token["new_id"] - 1,
+                                    verb_id,
+                                    token["feats"],
+                                    case_,
+                                )
+                                changed_sentence = self.generate_dict(
+                                    sentence,
+                                    new_sentence,
+                                    self.name,
+                                    "verb_dat_object",
+                                    token["form"],
+                                    new_word,
+                                    feats,
+                                    new_feats,
+                                    "Case",
+                                )
+                                changed_sentences.append(changed_sentence)
+        return changed_sentences
 
     def change_nominalization_case(
         self, sentence: conllu.models.TokenList
@@ -696,27 +811,52 @@ class Government(MinPairGenerator):
 
     def change_sentence(
         self,
-        sentence: str,
+        sentence: conllu.models.TokenList,
         old_word: str,
         new_word: str,
-        old_word_id: int,
-        verb_id: int,
+        old_word_id: int,   # это token["new_id"] - 1
+        verb_id: int,       # сюда обычно приходит head-1; ниже переведём в new_id-1
         token_feats: Dict[str, str],
-        new_case: str,
-    ) -> Tuple[Any]:
+         new_case: str,
+    ):
         """
-        Changes word in sentence to incorrect.
-        Returns changed sentence, old and new word feats.
+        Меняет слово на new_word и возвращает (new_word_cap, new_sentence_text, feats, new_feats).
+        Делает привязку по new_id, а не по split() исходного текста.
         """
-        new_word = capitalize_word(old_word, new_word)
-        new_sentence = sentence.metadata["text"].split()
-        new_sentence[old_word_id] = sub_word(new_sentence[old_word_id], new_word)
-        new_sentence = " ".join(new_sentence)
+        # 1) берём только «реальные» токены (без multiword/empty)
+        real_tokens = [tok for tok in sentence if isinstance(tok, dict) and "form" in tok]
+        surface = [tok["form"] for tok in real_tokens]
+
+        # 2) карта: позиция в surface по new_id-1
+        pos_by_newid = {tok["new_id"] - 1: i for i, tok in enumerate(real_tokens)}
+
+        # 3) позиция заменяемого слова
+        pos_word = pos_by_newid.get(old_word_id)
+
+        # 4) аккуратно получаем позицию глагола: переводим исходный verb_id в new_id-1
+        if 0 <= verb_id < len(sentence) and isinstance(sentence[verb_id], dict):
+            verb_newid_minus1 = sentence[verb_id].get("new_id", verb_id) - 1
+        else:
+            verb_newid_minus1 = verb_id
+        pos_verb = pos_by_newid.get(verb_newid_minus1)
+
+        # 5) если что-то не сошлось — просто не генерируем пару для этого предложения
+        # (кидаем исключение, которое перехватит верхний уровень и "continue")
+        if pos_word is None or pos_verb is None:
+            raise RuntimeError("align-failed")  # или верните None, если у вас уже стоит try/except
+
+        # 6) замена с учётом капитализации
+        new_word_cap = capitalize_word(old_word, new_word)
+        surface[pos_word] = sub_word(surface[pos_word], new_word_cap)
+        new_sentence_text = " ".join(surface)
+
+        # 7) фичи
         feats = token_feats.copy()
-        feats["government_form"] = unify_alphabet(sentence[verb_id]["form"])
+        feats["government_form"] = unify_alphabet(surface[pos_verb])
         new_feats = feats.copy()
         new_feats["Case"] = PYMORPHY2GRAMEVAL[new_case]
-        return new_word, new_sentence, feats, new_feats
+
+        return new_word_cap, new_sentence_text, feats, new_feats
 
     def get_stop_ids(self, sentence: conllu.models.TokenList) -> List[int]:
         """
@@ -872,6 +1012,7 @@ class Government(MinPairGenerator):
             self.change_nominalization_case,
             self.change_prep_case,
             self.change_obj_ins_case,
+            self.change_obj_dat_case
         ]:
             generated = generation_func(sentence)
             if generated is not None:
