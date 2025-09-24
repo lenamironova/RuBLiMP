@@ -6,7 +6,7 @@ from phenomena.min_pair_generator import MinPairGenerator
 from phenomena.government.constants import ADP_CASES, WH_STOP, MODAL_VERBS
 from utils.constants import GRAMEVAL2PYMORPHY, PYMORPHY2GRAMEVAL
 from utils.utils import reindex_sentence, sub_word, capitalize_word, unify_alphabet
-
+import re
 
 class Government(MinPairGenerator):
     """
@@ -40,6 +40,12 @@ class Government(MinPairGenerator):
             "ними",
             "мной",
             "мною",
+        ]
+        self.stop_pron_dat = [
+            "ей",
+            "ней",
+            "им",
+            "ним",
         ]
         self.deprels_stop = [
             "amod",
@@ -175,7 +181,7 @@ class Government(MinPairGenerator):
         sentence: conllu.models.TokenList,
     ) -> Optional[List[Dict[str, Any]]]:
         """
-        Finds sentences with verbs' direct object in dative case, changes dative to
+        Finds sentences with verbs' (indirect) object in dative case, changes dative to
         other cases (except nom, gen, and acc), checks the violated form to not overlap with any plural
         form of the word.
 
@@ -250,6 +256,8 @@ class Government(MinPairGenerator):
                             else:
                                 continue
                             if not self.morph.word_is_known(new_word):
+                                continue
+                            if new_word in self.stop_pron_dat:
                                 continue
                             if (
                                 new_word != token["form"].lower()
@@ -811,40 +819,27 @@ class Government(MinPairGenerator):
 
     def change_sentence(
         self,
-        sentence: conllu.models.TokenList,
+        sentence: str,
         old_word: str,
         new_word: str,
-        old_word_id: int, 
-        verb_id: int,       
+        old_word_id: int,
+        verb_id: int,
         token_feats: Dict[str, str],
-         new_case: str,
-    ):
-        real_tokens = [tok for tok in sentence if isinstance(tok, dict) and "form" in tok]
-        surface = [tok["form"] for tok in real_tokens]
-
-        pos_by_newid = {tok["new_id"] - 1: i for i, tok in enumerate(real_tokens)}
-
-        pos_word = pos_by_newid.get(old_word_id)
-
-        if 0 <= verb_id < len(sentence) and isinstance(sentence[verb_id], dict):
-            verb_newid_minus1 = sentence[verb_id].get("new_id", verb_id) - 1
-        else:
-            verb_newid_minus1 = verb_id
-        pos_verb = pos_by_newid.get(verb_newid_minus1)
-
-        if pos_word is None or pos_verb is None:
-            raise RuntimeError("align-failed")
-
-        new_word_cap = capitalize_word(old_word, new_word)
-        surface[pos_word] = sub_word(surface[pos_word], new_word_cap)
-        new_sentence_text = " ".join(surface)
-
+        new_case: str,
+    ) -> Tuple[Any]:
+        """
+        Changes word in sentence to incorrect.
+        Returns changed sentence, old and new word feats.
+        """
+        new_word = capitalize_word(old_word, new_word)
+        new_sentence = sentence.metadata["text"].split()
+        new_sentence[old_word_id] = sub_word(new_sentence[old_word_id], new_word)
+        new_sentence = " ".join(new_sentence)
         feats = token_feats.copy()
-        feats["government_form"] = unify_alphabet(surface[pos_verb])
+        feats["government_form"] = unify_alphabet(sentence[verb_id]["form"])
         new_feats = feats.copy()
         new_feats["Case"] = PYMORPHY2GRAMEVAL[new_case]
-
-        return new_word_cap, new_sentence_text, feats, new_feats
+        return new_word, new_sentence, feats, new_feats
 
     def get_stop_ids(self, sentence: conllu.models.TokenList) -> List[int]:
         """

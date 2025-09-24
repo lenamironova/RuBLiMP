@@ -19,7 +19,7 @@ def reindex_sentence(sentence: conllu.TokenList):
     for token in sentence:
         from_to[token['id']] = i
         token['new_id'] = i
-        if (not token['misc']) or token['misc'].get('SpaceAfter') != 'No': i+=1
+        if ((not token['misc']) or token['misc'].get('SpaceAfter') != 'No') and token['form'] != '_': i+=1
     for token in sentence:
         token["new_head"] = from_to.get(token["head"], 0)
 
@@ -29,10 +29,9 @@ def sub_word(orig_word: str, new_word: str):
     Заменить старое слово на новое с сохранением смежной окружающей пунктуации
     """
     pattern = r"^([{}]*)(.+?)([{}]*)$".format(punctuation_more, punctuation_more)
-    res = re.sub(pattern, r"\1" + new_word + r"\3", orig_word, count=1)
+    res = re.sub(pattern, lambda m: m.group(1) + new_word + m.group(3), orig_word, count=1)
     # print(orig_word, ">", res)
     return res
-
 
 def getcapital(s: str) -> List[int]:
     """
