@@ -67,9 +67,8 @@ class ArgumentStructure(MinPairGenerator):
         ]
         self.verbs["len"] = self.verbs["lemma"].apply(len)
 
-        self.nouns = vocab[
+        noun_mask = (
             (vocab["pos"] == "S")
-            & (vocab["animacy"] == "inan")
             & (vocab["t:time"] != 1)
             & (vocab["t:time:season"] != 1)
             & (vocab["sc:hum"] != 1)
@@ -86,9 +85,13 @@ class ArgumentStructure(MinPairGenerator):
             & (vocab["pt:set"] != 1)
             & (vocab["t:space"] != 1)
             & (vocab["t:topon"] != 1)
-        ].reset_index()
-        # print(self.nouns.head())
+        )
+        inan_mask = (vocab["animacy"] == "inan")
+
+        self.nouns = vocab[noun_mask & inan_mask].reset_index()
         self.nouns["len"] = self.nouns["lemma"].apply(len)
+        self.nouns_anim = vocab[noun_mask & ~inan_mask].reset_index()
+        self.nouns_anim["len"] = self.nouns["lemma"].apply(len)
 
         if self.use_similarity:
             self.sim_model = SentenceTransformer("sentence-transformers/LaBSE")
@@ -115,6 +118,11 @@ class ArgumentStructure(MinPairGenerator):
                 return 
             vocab = get_verbs_rnc(self.verbs.copy(), source_word)
             pos = "INFN"
+        elif tp == "noun_anim":
+            if source_word['feats'] is None or 'Gender' not in source_word['feats']:
+                return 
+            vocab = get_inan_nouns_rnc(self.nouns_anim.copy(), source_word)
+            pos = "NOUN"
         else:
             if source_word['feats'] is None or 'Gender' not in source_word['feats']:
                 return 
@@ -122,6 +130,7 @@ class ArgumentStructure(MinPairGenerator):
             pos = "NOUN"
 
         if len(vocab) == 0:
+            # if tp=="noun_anim": print(source_word, "> 0")
             return
 
         i = 0
@@ -630,6 +639,310 @@ class ArgumentStructure(MinPairGenerator):
 
         return altered_sents
 
+    def transitive_verb_ins_obj(
+        self, sentence: conllu.models.TokenList
+    ) -> List[Dict[str, Any]]:
+        """
+        Perturb sentence by changing an transitive verb oblique object in instrumental case
+        for one with the opposite animacy
+
+        Example:
+        Ведущий наградил девушку медалью ('The host awarded the girl with a medal')
+          -> Ведущий наградил медаль девушкой ('The host awarded the medal with a girl')
+          -> Ведущий наградил девушку водителем ('The host awarded the girl with a driver')
+        """
+        altered_sents = []
+
+        # a dictionary of all the dependencies
+        deprels = get_dependencies(sentence)
+
+        reindex_sentence(sentence)
+
+        for token in sentence:
+            parse = check_verb(token, self.morph, allow_part=True)
+            if not parse:
+                continue
+
+            # subj = find_deprels("nsubj", token["id"], deprels)
+            # if (
+            #     not subj
+            #     or len(subj["form"]) < 2
+            #     or subj["upos"] not in ["NOUN", "PROPN"]
+            #     or subj["feats"] is None
+            #     or ("Animacy" in subj["feats"] and subj["feats"]["Animacy"] == "Inan")
+            #     or "Gender" not in subj["feats"]
+            # ):
+            #     continue
+
+            ins_obj = find_deprels("obl", token["id"], deprels, deps="obl:ins")
+            if (
+                not ins_obj
+                or len(ins_obj["form"]) < 2
+                or ins_obj["feats"] is None
+                or ("Animacy" in ins_obj["feats"] and ins_obj["feats"]["Animacy"] != "Inan")
+                or "Gender" not in ins_obj["feats"]
+                # or get_modifiers(ins_obj, deprels)
+            ):
+                continue
+
+            ins_obj_infl_feats = get_noun_inlf_feats(ins_obj)
+            new_ins_obj = self.get_similar_word(
+                ins_obj, infl_feats=ins_obj_infl_feats, tp="noun_anim"
+            )
+            if not new_ins_obj:
+                pass
+            else:
+                new_sentence = sentence.metadata["text"].split(" ")
+                new_ins_obj = capitalize_word(ins_obj, new_ins_obj)
+                ins_obj_idx = ins_obj["new_id"]-1
+                new_sentence[ins_obj_idx] = sub_word(new_sentence[ins_obj_idx], new_ins_obj)
+                new_sentence = " ".join(new_sentence)
+
+                source_features = ins_obj["feats"].copy()
+                source_features["index"] = ins_obj["id"]
+                new_features = source_features.copy()
+                new_features["Animacy"] = "Anim"
+
+                # save results
+                altered_sents.append(
+                    self.generate_dict(
+                        sentence=sentence,
+                        target_sentence=new_sentence,
+                        phenomenon=self.name,
+                        phenomenon_subtype=f"transitive_verb_ins_obj_rand",
+                        source_word=ins_obj["form"],
+                        target_word=new_ins_obj,
+                        source_word_feats=source_features,
+                        target_word_feats=new_features,
+                        feature="Animacy",
+                    )
+                )
+
+            obj = find_deprels("obj", token["id"], deprels)
+            if (
+                not obj
+                or len(obj["form"]) < 2
+                or obj["feats"] is None
+                or ("Animacy" in obj["feats"] and obj["feats"]["Animacy"] == "Inan")
+                or "Gender" not in obj["feats"]
+                # or get_modifiers(obj, deprels)
+            ):
+                continue
+
+            obj_parse = get_pymorphy_parse(obj, "NOUN", self.morph)
+            # print(obj, obj_parse)
+            if not obj_parse  or obj_parse.tag.animacy == 'inan':
+                continue
+            # print(sentence.metadata["text"] + "\n", obj, ins_obj)
+
+            obj_infl_feats = get_noun_inlf_feats(obj)
+
+            if (
+                not check_permutaility(obj, ins_obj)
+                # or obj['upos'] == 'PROPN'
+                or any(x in obj_parse.tag for x in ['Surn', 'Name'])
+            ):
+                continue
+            
+            ins_obj_parse = get_pymorphy_parse(ins_obj, "NOUN", self.morph)
+            if not ins_obj_parse:
+                continue
+            
+            ins_obj_infl_feats = get_noun_inlf_feats(ins_obj)
+
+            new_obj = inflect_word(ins_obj_parse, obj_infl_feats)
+            new_ins_obj = inflect_word(obj_parse, ins_obj_infl_feats)
+
+            if not new_obj or not new_ins_obj:
+                continue
+            
+            new_sentence = sentence.metadata["text"].split(" ")
+            new_ins_obj = capitalize_word(ins_obj, new_ins_obj, ins_obj["upos"])
+            ins_obj_idx = ins_obj["new_id"]-1
+            new_sentence[ins_obj_idx] = sub_word(new_sentence[ins_obj_idx], new_ins_obj)
+            new_obj = capitalize_word(obj, new_obj, obj["upos"])
+            obj_idx = obj["new_id"]-1
+            new_sentence[obj_idx] = sub_word(new_sentence[obj_idx], new_obj)
+            new_sentence = " ".join(new_sentence)
+
+            source_features = ins_obj["feats"].copy()
+            source_features["index"] = ins_obj["id"]
+            new_features = source_features.copy()
+            new_features["Animacy"] = "Inan"
+            new_features["index"] = obj["id"]
+
+            # save results
+            altered_sents.append(
+                self.generate_dict(
+                    sentence=sentence,
+                    target_sentence=new_sentence,
+                    phenomenon=self.name,
+                    phenomenon_subtype=f"transitive_verb_ins_obj_perm",
+                    source_word=ins_obj["form"],
+                    target_word=new_ins_obj,
+                    source_word_feats=source_features,
+                    target_word_feats=new_features,
+                    feature="Animacy",
+                )
+            )
+
+        return altered_sents
+
+    def intransitive_verb_ins_obj(
+        self, sentence: conllu.models.TokenList
+    ) -> List[Dict[str, Any]]:
+        """
+        Perturb sentence by changing an inanimate intransitive verb oblique object
+        in instrumental case for an animate one
+
+        Example:
+        Девушка занимается математикой ('The girl is studying maths')
+          -> Математика занимается девушкой ('Maths is studying the girl')
+          -> Девушка занимается водителем ('The girl is studying a driver')
+        """
+        altered_sents = []
+
+        # a dictionary of all the dependencies
+        deprels = get_dependencies(sentence)
+
+        reindex_sentence(sentence)
+
+        for token in sentence:
+            parse = check_verb(token, self.morph, allow_part=True, tran=False)
+            if not parse:
+                continue
+
+            ins_obj = find_deprels("obl", token["id"], deprels, deps="obl:ins")
+            if (
+                not ins_obj
+                or len(ins_obj["form"]) < 2
+                or ins_obj["feats"] is None
+                or ("Animacy" in ins_obj["feats"] and ins_obj["feats"]["Animacy"] != "Inan")
+                or "Gender" not in ins_obj["feats"]
+                # or get_modifiers(ins_obj, deprels)
+            ):
+                continue
+
+            ins_obj_infl_feats = get_noun_inlf_feats(ins_obj)
+
+            new_ins_obj = self.get_similar_word(ins_obj, infl_feats=ins_obj_infl_feats, tp="noun_anim")
+            if not new_ins_obj:
+                pass
+            else:
+                new_sentence = sentence.metadata["text"].split(" ")
+                new_ins_obj = capitalize_word(ins_obj, new_ins_obj)
+                ins_obj_idx = ins_obj["new_id"]-1
+                new_sentence[ins_obj_idx] = sub_word(new_sentence[ins_obj_idx], new_ins_obj)
+                new_sentence = " ".join(new_sentence)
+
+                source_features = ins_obj["feats"].copy()
+                source_features["index"] = ins_obj["id"]
+                new_features = source_features.copy()
+                new_features["Animacy"] = "Anim"
+
+                # save results
+                altered_sents.append(
+                    self.generate_dict(
+                        sentence=sentence,
+                        target_sentence=new_sentence,
+                        phenomenon=self.name,
+                        phenomenon_subtype=f"intransitive_verb_obj",
+                        source_word=ins_obj["form"],
+                        target_word=new_ins_obj,
+                        source_word_feats=source_features,
+                        target_word_feats=new_features,
+                        feature="Animacy",
+                    )
+                )
+
+            subj = find_deprels("nsubj", token["id"], deprels)
+            if (
+                not subj
+                or len(subj["form"]) < 2
+                or subj["upos"] not in ["NOUN", "PROPN"]
+                or subj["feats"] is None
+                or ("Animacy" in subj["feats"] and subj["feats"]["Animacy"] == "Inan")
+                or "Gender" not in subj["feats"]
+                # or get_modifiers(subj, deprels)
+            ):
+                continue
+
+            # xcomp = find_deprels("xcomp", token["id"], deprels)
+            # if (
+            #     not xcomp
+            #     or (xcomp["id"] - ins_obj["id"]) != 1
+            #     or (
+            #         xcomp["feats"] is not None
+            #         and (
+            #             (
+            #                 "VerbForm" in xcomp["feats"]
+            #                 and xcomp["feats"]["VerbForm"] == "Part"
+            #             )
+            #             or (
+            #                 "Voice" in xcomp["feats"]
+            #                 and xcomp["feats"]["Voice"] == "Pass"
+            #             )
+            #         )
+            #     )
+            # ):
+            #     continue
+
+            subj_parse = get_pymorphy_parse(subj, "NOUN", self.morph)
+            if not subj_parse:
+                continue
+            subj_inlf_feats = get_noun_inlf_feats(subj)
+
+            if (
+                not check_permutaility(subj, ins_obj)
+                # or obj['upos'] == 'PROPN'
+                or any(x in subj_parse.tag for x in ['Surn', 'Name'])
+            ):
+                continue
+            
+            ins_obj_parse = get_pymorphy_parse(ins_obj, "NOUN", self.morph)
+            if not ins_obj_parse:
+                continue
+            
+            ins_obj_infl_feats = get_noun_inlf_feats(ins_obj)
+
+            new_subj = inflect_word(ins_obj_parse, subj_inlf_feats)
+            new_ins_obj = inflect_word(subj_parse, ins_obj_infl_feats)
+
+            if not new_subj or not new_ins_obj:
+                continue
+            
+            new_sentence = sentence.metadata["text"].split(" ")
+            new_ins_obj = capitalize_word(ins_obj, new_ins_obj, ins_obj["upos"])
+            ins_obj_idx = ins_obj["new_id"]-1
+            new_sentence[ins_obj_idx] = sub_word(new_sentence[ins_obj_idx], new_ins_obj)
+            new_subj = capitalize_word(subj, new_subj, subj["upos"])
+            subj_idx = subj["new_id"]-1
+            new_sentence[subj_idx] = sub_word(new_sentence[subj_idx], new_subj)
+            new_sentence = " ".join(new_sentence)
+
+            source_features = ins_obj["feats"].copy()
+            source_features["index"] = ins_obj["id"]
+            new_features = source_features.copy()
+            new_features["Animacy"] = "Anim"
+            new_features["index"] = subj["id"]
+
+            # save results
+            altered_sents.append(
+                self.generate_dict(
+                    sentence=sentence,
+                    target_sentence=new_sentence,
+                    phenomenon=self.name,
+                    phenomenon_subtype=f"intransitive_verb_ins_obj_perm",
+                    source_word=ins_obj["form"],
+                    target_word=new_ins_obj,
+                    source_word_feats=source_features,
+                    target_word_feats=new_features,
+                    feature="Animacy",
+                )
+            )
+
+        return altered_sents
+
     def transitive_verb_obj(
         self, sentence: conllu.models.TokenList
     ) -> List[Dict[str, Any]]:
@@ -747,6 +1060,8 @@ class ArgumentStructure(MinPairGenerator):
             self.transitive_verb_subj,
             self.transitive_verb_passive,
             self.transitive_verb_iobj,
+            self.transitive_verb_ins_obj,
+            self.intransitive_verb_ins_obj,
             self.transitive_verb_obj,
         ]:
             altered.extend(perturbation_func(sentence))

@@ -119,19 +119,22 @@ def inflect_word(
 
 
 def find_deprels(
-    deprel: str, token_id: int, dependencies: List[conllu.models.Token]
+    deprel: str, token_id: int, dependencies: List[conllu.models.Token], deps: str | None = None
 ) -> Optional[conllu.models.Token]:
     """
     Find all the token dependencies with a given relation
     """
     if token_id not in dependencies:
         return
-    deprels = [t for t in dependencies[token_id] if t["deprel"] == deprel]
+    deprels = [
+        t for t in dependencies[token_id]
+        if t["deprel"] == deprel and (not deps or any([d[0] == deps for d in t["deps"]]))
+    ]
     return None if len(deprels) == 0 else deprels[0]
 
 
 def check_verb(
-    token: conllu.models.Token, morph: pymorphy2.MorphAnalyzer, allow_part: bool = False
+    token: conllu.models.Token, morph: pymorphy2.MorphAnalyzer, allow_part: bool = False, tran: bool = True
 ) -> Optional[pymorphy2.analyzer.Parse]:
     """
     Check that a verb has all the required features for
@@ -157,7 +160,9 @@ def check_verb(
 
     if not allow_part:
         transitivity = parse.tag.transitivity
-        if transitivity != "tran":
+        if tran and transitivity != "tran":
+            return
+        if not tran and transitivity == "tran":
             return
 
     return parse
@@ -184,6 +189,7 @@ def get_inan_nouns_rnc(
     """
     filtered_vocab = vocab[
         (vocab["gender"] == source_word["feats"]["Gender"][0].lower())
-        & (abs(vocab["len"] - len(source_word["lemma"])) < 3)
+        # & (abs(vocab["len"] - len(source_word["lemma"])) < 3)
+        # -- исключено из-за того, что в vocabulary представлено лишь десять лексем для примера
     ]
     return filtered_vocab

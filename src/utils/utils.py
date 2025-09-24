@@ -19,7 +19,7 @@ def reindex_sentence(sentence: conllu.TokenList):
     for token in sentence:
         from_to[token['id']] = i
         token['new_id'] = i
-        if (not token['misc']) or token['misc'].get('SpaceAfter') != 'No': i+=1
+        if ((not token['misc']) or token['misc'].get('SpaceAfter') != 'No') and token['form'] != '_': i+=1
     for token in sentence:
         token["new_head"] = from_to.get(token["head"], 0)
 
